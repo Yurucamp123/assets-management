@@ -36,7 +36,7 @@ export default function Login() {
   };
 
   const handleSocialLogin = (provider: "Google" | "Facebook") => {
-    window.location.href = `${import.meta.env.REACT_APP_API_URL}/oauth2/authorization/${provider.toLowerCase()}`;
+    window.location.href = `${import.meta.env.VITE_API_URL}/oauth2/authorization/${provider.toLowerCase()}`;
   };
 
   return (
