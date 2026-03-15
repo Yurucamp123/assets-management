@@ -7,18 +7,58 @@ import {
   Package,
   RotateCcw,
   X,
-  XCircle
+  XCircle,
 } from "lucide-react";
-import { useState } from "react";
+import React, { useState } from "react";
 import { toast } from "react-hot-toast";
 import { adminApi } from "../api/adminApi";
+import { AxiosError } from "axios";
+
+// --- ĐỊNH NGHĨA TYPES ---
+
+// Định nghĩa các trạng thái yêu cầu có thể có
+export type RequestStatusType =
+  | "PENDING"
+  | "APPROVED"
+  | "REJECTED"
+  | "RETURNED"
+  | "WAITING_FOR_RETURN";
+
+// Interface cho một đối tượng yêu cầu (Request)
+interface AssetRequest {
+  id: number;
+  userId?: number;
+  username: string;
+  assetId: number;
+  assetName: string;
+  assetTag: string;
+  status: RequestStatusType;
+  createdAt: string;
+  returnDate: string;
+}
+
+// Interface cho phản hồi phân trang từ API
+interface RequestResponse {
+  content: AssetRequest[];
+  totalElements: number;
+  totalPages: number;
+  size: number;
+  number: number;
+}
+
+// Interface cho cấu trúc lỗi trả về từ Backend
+interface ApiErrorResponse {
+  message: string;
+}
 
 export default function ApproveRequests() {
   const queryClient = useQueryClient();
   const [rejectId, setRejectId] = useState<number | null>(null);
-  const [reason, setReason] = useState("");
+  const [reason, setReason] = useState<string>("");
   const [returnId, setReturnId] = useState<number | null>(null);
-  const requestStatus = {
+
+  // Ép kiểu cho object label để an toàn khi truy xuất theo key
+  const requestStatusLabels: Record<RequestStatusType, string> = {
     PENDING: "Chờ duyệt",
     APPROVED: "Đã duyệt",
     REJECTED: "Đã từ chối",
@@ -26,24 +66,25 @@ export default function ApproveRequests() {
     WAITING_FOR_RETURN: "Chờ duyệt trả",
   };
 
-  // 1. Lấy danh sách yêu cầu (Dùng chung cho cả mượn và trả)
-  const { data, isLoading } = useQuery({
+  // 1. Lấy danh sách yêu cầu (Đã thêm Type cho useQuery)
+  const { data, isLoading } = useQuery<RequestResponse>({
     queryKey: ["admin-requests"],
     queryFn: () => adminApi.getRequests(),
   });
 
-  // 2. Mutation Phê duyệt (Dùng cho cả Duyệt Mượn và Duyệt Trả)
+  // 2. Mutation Phê duyệt
   const approveMutation = useMutation({
-    mutationFn: (id: number) => adminApi.confirmReturn(id),
+    mutationFn: (id: number) => adminApi.approveRequest(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-requests"] });
-      queryClient.invalidateQueries({ queryKey: ["admin-summary"] }); // Cập nhật lại dashboard
+      queryClient.invalidateQueries({ queryKey: ["admin-summary"] });
       toast.success("Thao tác thành công!");
     },
-    onError: (error: any) => {
+    onError: (error: AxiosError<ApiErrorResponse>) => {
       toast.error(error?.response?.data?.message || "Không thể thực hiện");
     },
   });
+
   // 3. Mutation Từ chối
   const rejectMutation = useMutation({
     mutationFn: ({ id, reason }: { id: number; reason: string }) =>
@@ -54,7 +95,7 @@ export default function ApproveRequests() {
       setReason("");
       toast.success("Đã từ chối yêu cầu");
     },
-    onError: (error: any) => {
+    onError: (error: AxiosError<ApiErrorResponse>) => {
       toast.error(error?.response?.data?.message || "Lỗi khi từ chối");
     },
   });
@@ -91,7 +132,8 @@ export default function ApproveRequests() {
         <div className="flex gap-2">
           <span className="bg-amber-100 text-amber-700 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider shadow-sm flex items-center gap-2">
             <Clock size={12} />{" "}
-            {data?.content?.filter((r: any) => r.status === "PENDING").length}{" "}
+            {data?.content?.filter((r: AssetRequest) => r.status === "PENDING")
+              .length || 0}{" "}
             Chờ duyệt
           </span>
           <span className="bg-blue-100 text-blue-700 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider shadow-sm flex items-center gap-2">
@@ -126,7 +168,7 @@ export default function ApproveRequests() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {data?.content?.length === 0 ? (
+              {!data || data.content.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="p-20 text-center">
                     <div className="flex flex-col items-center gap-3 opacity-20">
@@ -138,7 +180,7 @@ export default function ApproveRequests() {
                   </td>
                 </tr>
               ) : (
-                data?.content?.map((req: any) => (
+                data.content.map((req: AssetRequest) => (
                   <tr
                     key={req.id}
                     className="hover:bg-blue-50/30 transition-all duration-300 group"
@@ -146,11 +188,11 @@ export default function ApproveRequests() {
                     <td className="p-5">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center text-slate-600 font-bold border border-white shadow-sm group-hover:scale-110 transition-transform">
-                          {req.username?.charAt(0).toUpperCase()}
+                          {req.username?.charAt(0).toUpperCase() || "?"}
                         </div>
                         <div>
                           <div className="font-bold text-slate-700 text-sm">
-                            {req?.username}
+                            {req.username}
                           </div>
                           <div className="text-[10px] text-slate-400 font-medium">
                             Employee ID: #00{req.userId || req.id}
@@ -165,11 +207,11 @@ export default function ApproveRequests() {
                           <Package size={14} />
                         </div>
                         <span className="font-bold text-sm tracking-tight">
-                          {req?.assetName}
+                          {req.assetName}
                         </span>
                       </div>
                       <div className="text-[10px] text-slate-400 mt-1 font-bold">
-                        TAG: {req?.assetTag || "N/A"}
+                        TAG: {req.assetTag || "N/A"}
                       </div>
                     </td>
 
@@ -206,15 +248,12 @@ export default function ApproveRequests() {
                               : "bg-rose-50 text-rose-600 border-rose-200"
                         }`}
                       >
-                        {requestStatus[
-                          req.status as keyof typeof requestStatus
-                        ] || req.status}
+                        {requestStatusLabels[req.status] || req.status}
                       </span>
                     </td>
 
-                    <td className="p-5">
+                    <td className="p-5 text-center">
                       <div className="flex justify-center gap-2">
-                        {/* TRƯỜNG HỢP 1: ĐANG CHỜ DUYỆT (Hiện nút Duyệt/Từ chối) */}
                         {req.status === "PENDING" && (
                           <>
                             <button
@@ -235,8 +274,7 @@ export default function ApproveRequests() {
                           </>
                         )}
 
-                        {/* TRƯỜNG HỢP 2: ĐÃ DUYỆT NHƯNG MUỐN THU HỒI/XÁC NHẬN TRẢ (Nâng cấp mới) */}
-                        {req.status === "APPROVED" && (
+                        {(req.status === "APPROVED" || req.status === "WAITING_FOR_RETURN") && (
                           <button
                             onClick={() => setReturnId(req.id)}
                             className="flex items-center gap-2 px-4 py-2 text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white rounded-xl transition-all border border-blue-100 font-bold text-[11px] shadow-sm"
@@ -290,16 +328,16 @@ export default function ApproveRequests() {
               </p>
 
               <form onSubmit={handleRejectSubmit} className="space-y-6">
-                <div className="relative">
-                  <textarea
-                    autoFocus
-                    className="w-full border-2 border-slate-100 rounded-[1.5rem] p-5 text-sm outline-none focus:border-rose-500/20 focus:ring-4 focus:ring-rose-500/5 transition-all min-h-[140px] font-medium placeholder:text-slate-300"
-                    placeholder="Lý do từ chối (ví dụ: Máy đang bảo trì, thông tin không hợp lệ...)"
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    required
-                  />
-                </div>
+                <textarea
+                  autoFocus
+                  className="w-full border-2 border-slate-100 rounded-[1.5rem] p-5 text-sm outline-none focus:border-rose-500/20 focus:ring-4 focus:ring-rose-500/5 transition-all min-h-[140px] font-medium placeholder:text-slate-300"
+                  placeholder="Lý do từ chối (ví dụ: Máy đang bảo trì, thông tin không hợp lệ...)"
+                  value={reason}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                    setReason(e.target.value)
+                  }
+                  required
+                />
 
                 <div className="flex gap-4 mt-8">
                   <button
@@ -329,7 +367,7 @@ export default function ApproveRequests() {
           <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in duration-300 border border-white">
             <div className="p-8 text-center">
               <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
-                <RotateCcw size={40} className="animate-spin-slow" />
+                <RotateCcw size={40} />
               </div>
               <h3 className="text-2xl font-black text-slate-800 mb-2">
                 Xác nhận thu hồi?

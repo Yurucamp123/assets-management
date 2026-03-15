@@ -1,36 +1,78 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Edit3, Plus, Trash2, X } from "lucide-react";
-import { useState } from "react";
-import { toast } from "react-hot-toast"; // Khuyên dùng để báo thành công/lỗi
+import React, { useState } from "react";
+import { toast } from "react-hot-toast";
 import { adminApi } from "../api/adminApi";
 import { assetApi } from "../api/assetApi";
+import { AxiosError } from "axios";
+
+// --- ĐỊNH NGHĨA TYPES (INTERFACES) ---
+
+export type AssetStatus = "AVAILABLE" | "ASSIGNED" | "MAINTENANCE" | "BROKEN";
+export type AssetCategory = "LAPTOP" | "SMARTPHONE" | "ACCESSORY" | "OTHER";
+
+interface Asset {
+  id: number;
+  assetName: string;
+  assetTag: string;
+  category: AssetCategory;
+  status: AssetStatus;
+}
+
+interface AssetResponse {
+  content: Asset[];
+  totalElements: number;
+  totalPages: number;
+  size: number;
+  number: number;
+}
+
+interface ApiErrorResponse {
+  message: string;
+}
+
+interface AssetUpdatePayload {
+  id: number;
+  data: Partial<Asset>;
+}
 
 export default function ManageAssets() {
   const queryClient = useQueryClient();
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingAsset, setEditingAsset] = useState<any>(null);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+
   const assetTypes = [
     { value: "LAPTOP", label: "Laptop" },
     { value: "SMARTPHONE", label: "Điện thoại" },
     { value: "ACCESSORY", label: "Phụ kiện" },
     { value: "OTHER", label: "Khác" },
   ];
-  const { data } = useQuery({
+
+  const assetStatuses = [
+    { value: "AVAILABLE", label: "Có sẵn" },
+    { value: "ASSIGNED", label: "Đang mượn" },
+    { value: "MAINTENANCE", label: "Bảo trì" },
+    { value: "BROKEN", label: "Đã thanh lý/Đã hỏng" },
+  ];
+
+  // 1. Fetch Data với Type cụ thể
+  const { data } = useQuery<AssetResponse>({
     queryKey: ["admin-assets"],
     queryFn: () => assetApi.getAll(0, 50),
   });
 
+  // 2. Mutations
   const createMutation = useMutation({
-    mutationFn: assetApi.create,
+    mutationFn: (payload: any) => assetApi.create(payload), // payload từ form thường là any hoặc Record
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-assets"] });
       queryClient.invalidateQueries({ queryKey: ["admin-summary"] });
       closeModal();
       toast.success("Thêm thiết bị thành công!");
     },
-    onError: (err: any) => {
+    onError: (err: AxiosError<ApiErrorResponse>) => {
       const msg =
         err.response?.data?.message ||
         "Không thể thêm thiết bị. Vui lòng kiểm tra lại!";
@@ -38,29 +80,28 @@ export default function ManageAssets() {
     },
   });
 
-  // 2. Mutation Cập nhật thông tin (Modal)
   const updateMutation = useMutation({
-    mutationFn: (vars: { id: number; data: any }) =>
+    mutationFn: (vars: AssetUpdatePayload) =>
       assetApi.update(vars.id, vars.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-assets"] });
       closeModal();
       toast.success("Cập nhật thông tin thành công!");
     },
-    onError: (err: any) => {
+    onError: (err: AxiosError<ApiErrorResponse>) => {
       const msg = err.response?.data?.message || "Cập nhật thất bại!";
       toast.error(msg);
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: assetApi.delete,
+    mutationFn: (id: number) => assetApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-assets"] });
       toast.success("Đã xóa thiết bị thành công!");
       closeDeleteModal();
     },
-    onError: (err: any) => {
+    onError: (err: AxiosError<ApiErrorResponse>) => {
       const errorMsg =
         err.response?.data?.message || "Không thể xóa thiết bị này!";
       toast.error(errorMsg);
@@ -72,11 +113,11 @@ export default function ManageAssets() {
     mutationFn: ({ id, status }: { id: number; status: string }) =>
       adminApi.updateAssetStatus(id, status),
     onSuccess: () => {
-      toast.success("Cập nhật trạng thái thành công");
+      toast.success("Trạng thái đã được cập nhật");
       queryClient.invalidateQueries({ queryKey: ["admin-assets"] });
       queryClient.invalidateQueries({ queryKey: ["admin-summary"] });
     },
-    onError: (err: any) =>
+    onError: (err: AxiosError<ApiErrorResponse>) =>
       toast.error(err.response?.data?.message || "Lỗi cập nhật"),
   });
 
@@ -97,7 +138,7 @@ export default function ManageAssets() {
   };
 
   // 3. Handlers
-  const handleEdit = (asset: any) => {
+  const handleEdit = (asset: Asset) => {
     setEditingAsset(asset);
     setIsModalOpen(true);
   };
@@ -111,7 +152,6 @@ export default function ManageAssets() {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const payload = Object.fromEntries(formData.entries());
-    console.log(payload);
 
     if (editingAsset) {
       updateMutation.mutate({ id: editingAsset.id, data: payload });
@@ -166,7 +206,7 @@ export default function ManageAssets() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {data?.content?.map((asset: any) => (
+            {data?.content?.map((asset: Asset) => (
               <tr
                 key={asset.id}
                 className="hover:bg-slate-50 transition-colors"
@@ -182,18 +222,16 @@ export default function ManageAssets() {
                 <td className="px-6 py-4">
                   <select
                     value={asset.status}
-                    // Khóa select nếu đang mượn hoặc đã hỏng
                     disabled={
                       asset.status === "BROKEN" || asset.status === "ASSIGNED"
                     }
-                    onChange={(e) =>
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
                       updateStatusMutation.mutate({
                         id: asset.id,
                         status: e.target.value,
                       })
                     }
-                    className={`
-                      px-3 py-1.5 rounded-xl font-bold text-[11px] border-none outline-none ring-2 ring-transparent transition-all cursor-pointer
+                    className={`px-3 py-1.5 rounded-xl font-bold text-[11px] border-none outline-none ring-2 ring-transparent transition-all cursor-pointer
                       ${asset.status === "AVAILABLE" ? "bg-emerald-50 text-emerald-600 focus:ring-emerald-200" : ""}
                       ${asset.status === "MAINTENANCE" ? "bg-amber-50 text-amber-600 focus:ring-amber-200" : ""}
                       ${asset.status === "BROKEN" ? "bg-rose-50 text-rose-600 opacity-80 cursor-not-allowed" : ""}
@@ -204,17 +242,30 @@ export default function ManageAssets() {
                       value="AVAILABLE"
                       disabled={asset.status === "BROKEN"}
                     >
-                      Có sẵn
+                      {
+                        assetStatuses.find((t) => t.value === "AVAILABLE")
+                          ?.label
+                      }
                     </option>
                     <option
                       value="MAINTENANCE"
                       disabled={asset.status === "BROKEN"}
                     >
-                      Bảo trì
+                      {
+                        assetStatuses.find((t) => t.value === "MAINTENANCE")
+                          ?.label
+                      }
                     </option>
-                    <option value="BROKEN">Đã hỏng/Thanh lý</option>
+                    <option value="BROKEN">
+                      {assetStatuses.find((t) => t.value === "BROKEN")?.label}
+                    </option>
                     {asset.status === "ASSIGNED" && (
-                      <option value="ASSIGNED">Đang mượn</option>
+                      <option value="ASSIGNED">
+                        {
+                          assetStatuses.find((t) => t.value === "ASSIGNED")
+                            ?.label
+                        }
+                      </option>
                     )}
                   </select>
                 </td>
@@ -238,7 +289,7 @@ export default function ManageAssets() {
         </table>
       </div>
 
-      {/* MODAL FORM (Phần 2 trọng tâm) */}
+      {/* MODAL FORM */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">

@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Package,
   Search,
@@ -10,15 +10,45 @@ import {
   ArrowRight,
   AlertCircle,
 } from "lucide-react";
-import { useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { assetApi } from "../api/assetApi";
 import { requestApi } from "../api/requestApi";
 import { toast } from "react-hot-toast";
+import { AxiosError } from "axios";
+
+// --- DEFINING TYPES ---
+
+interface Asset {
+  id: number;
+  assetName: string;
+  assetTag: string;
+  status: "AVAILABLE" | "ASSIGNED" | "MAINTENANCE" | "BROKEN";
+  category?: string;
+}
+
+interface AssetResponse {
+  content: Asset[];
+  totalElements: number;
+  totalPages: number;
+  size: number;
+  number: number;
+}
+
+interface BorrowRequestPayload {
+  assetId: number;
+  borrowDate: string;
+  returnDate: string;
+  note: string;
+}
+
+interface ApiErrorResponse {
+  message: string;
+}
 
 export default function AssetList() {
   const queryClient = useQueryClient();
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedAsset, setSelectedAsset] = useState<any>(null);
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
 
   // Khởi tạo form khớp hoàn toàn với Backend BorrowRequest
   const [formData, setFormData] = useState({
@@ -27,22 +57,23 @@ export default function AssetList() {
     note: "",
   });
 
-  // 1. Lấy danh sách thiết bị
-  const { data, isLoading } = useQuery({
+  // 1. Lấy danh sách thiết bị (Đã thêm Type)
+  const { data, isLoading } = useQuery<AssetResponse>({
     queryKey: ["assets"],
     queryFn: () => assetApi.getAll(0, 50),
   });
 
-  // 2. Mutation gửi yêu cầu mượn
+  // 2. Mutation gửi yêu cầu mượn (Đã thêm Type cho payload và error)
   const borrowMutation = useMutation({
-    mutationFn: requestApi.createBorrowRequest,
+    mutationFn: (payload: BorrowRequestPayload) =>
+      requestApi.createBorrowRequest(payload),
     onSuccess: () => {
       toast.success("Gửi yêu cầu thành công! Vui lòng đợi phê duyệt.");
       queryClient.invalidateQueries({ queryKey: ["assets"] });
       queryClient.invalidateQueries({ queryKey: ["requests"] });
       handleCloseModal();
     },
-    onError: (error: any) => {
+    onError: (error: AxiosError<ApiErrorResponse>) => {
       const msg = error.response?.data?.message || "Lỗi hệ thống, thử lại sau.";
       toast.error(msg);
     },
@@ -76,13 +107,13 @@ export default function AssetList() {
     });
   };
 
-  // Lọc tìm kiếm
+  // Lọc tìm kiếm (Đã thêm Type cho tham số 'a')
   const filteredAssets = useMemo(() => {
     return (
       data?.content
-        ?.filter((a: any) => a.status === "AVAILABLE")
+        ?.filter((a: Asset) => a.status === "AVAILABLE")
         .filter(
-          (a: any) =>
+          (a: Asset) =>
             a.assetName.toLowerCase().includes(searchTerm.toLowerCase()) ||
             a.assetTag.toLowerCase().includes(searchTerm.toLowerCase()),
         ) || []
@@ -129,7 +160,7 @@ export default function AssetList() {
 
       {/* Grid Display */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {filteredAssets.map((asset: any) => (
+        {filteredAssets.map((asset: Asset) => (
           <div
             key={asset.id}
             className="bg-white rounded-[2rem] border border-slate-100 p-6 shadow-sm hover:shadow-xl hover:shadow-blue-900/5 transition-all duration-500 flex flex-col group relative overflow-hidden"

@@ -5,32 +5,50 @@ import {
   RefreshCcw,
   Search,
   Terminal,
-  Loader2
+  Loader2,
 } from "lucide-react";
-import { useState } from "react";
+import React, { useState } from "react";
 import { adminApi } from "../api/adminApi";
 
+// --- ĐỊNH NGHĨA TYPES ---
+
+interface AuditLog {
+  id: number;
+  timestamp: string;
+  userId: number | null;
+  username: string;
+  action: string;
+  details: string;
+}
+
+interface AuditLogResponse {
+  content: AuditLog[];
+  totalPages: number;
+  totalElements: number;
+  size: number;
+  number: number;
+}
+
 export default function AuditLogs() {
-  const [page, setPage] = useState(0);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [actionFilter, setActionFilter] = useState("ALL");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [isExporting, setIsExporting] = useState(false);
+  const [page, setPage] = useState<number>(0);
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [actionFilter, setActionFilter] = useState<string>("ALL");
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
+  const [isExporting, setIsExporting] = useState<boolean>(false);
   const pageSize = 10;
 
-  // 1. Fetch dữ liệu
-  const { data, isLoading } = useQuery({
+  // 1. Fetch dữ liệu với Type cụ thể
+  const { data, isLoading } = useQuery<AuditLogResponse>({
     queryKey: ["audit-logs", page],
     queryFn: () => adminApi.getLogs(page, pageSize),
     placeholderData: (previousData) => previousData,
   });
 
-  const logs = data?.content || [];
+  const logs: AuditLog[] = data?.content || [];
 
-  // 2. Logic Lọc an toàn (Sửa lỗi .includes)
-  const filteredLogs = logs.filter((log: any) => {
-    // Ép kiểu về string trống nếu dữ liệu null/undefined để tránh lỗi .includes
+  // 2. Logic Lọc an toàn
+  const filteredLogs = logs.filter((log: AuditLog) => {
     const action = log?.action || "";
     const username = log?.username || "";
     const details = log?.details || "";
@@ -62,7 +80,7 @@ export default function AuditLogs() {
   const handleExport = async (exportAll: boolean) => {
     try {
       setIsExporting(true);
-      const dataToExport = exportAll
+      const dataToExport: AuditLog[] = exportAll
         ? (await adminApi.getLogs(0, 9999)).content
         : filteredLogs;
 
@@ -75,7 +93,8 @@ export default function AuditLogs() {
         "Hành động",
         "Chi tiết",
       ];
-      const csvRows = dataToExport.map((log: any) =>
+
+      const csvRows = dataToExport.map((log: AuditLog) =>
         [
           log.id,
           `"${new Date(log.timestamp).toLocaleString("vi-VN")}"`,
@@ -95,6 +114,7 @@ export default function AuditLogs() {
       link.href = url;
       link.download = `Audit_Logs_${new Date().getTime()}.csv`;
       link.click();
+      URL.revokeObjectURL(url);
     } catch (error) {
       console.error("Export error", error);
     } finally {
@@ -137,7 +157,9 @@ export default function AuditLogs() {
                 placeholder="User, chi tiết..."
                 className="pl-9 pr-4 py-2 bg-slate-50 border-none rounded-xl text-sm w-full lg:w-48 outline-none focus:ring-2 focus:ring-blue-500/20"
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setSearchTerm(e.target.value)
+                }
               />
             </div>
           </div>
@@ -148,7 +170,9 @@ export default function AuditLogs() {
             </label>
             <select
               value={actionFilter}
-              onChange={(e) => setActionFilter(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                setActionFilter(e.target.value)
+              }
               className="w-full lg:w-40 px-3 py-2 bg-slate-50 border-none rounded-xl text-sm outline-none cursor-pointer"
             >
               <option value="ALL">Tất cả</option>
@@ -165,7 +189,9 @@ export default function AuditLogs() {
             <input
               type="date"
               className="w-full lg:w-40 px-3 py-2 bg-slate-50 border-none rounded-xl text-sm outline-none"
-              onChange={(e) => setStartDate(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                setStartDate(e.target.value)
+              }
             />
           </div>
 
@@ -176,12 +202,13 @@ export default function AuditLogs() {
             <input
               type="date"
               className="w-full lg:w-40 px-3 py-2 bg-slate-50 border-none rounded-xl text-sm outline-none"
-              onChange={(e) => setEndDate(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                setEndDate(e.target.value)
+              }
             />
           </div>
 
           <div className="flex gap-2 ml-auto">
-            {/* Dropdown Xuất dữ liệu - Đã sửa lỗi mất hover */}
             <div className="relative group">
               <button
                 disabled={isExporting}
@@ -195,10 +222,8 @@ export default function AuditLogs() {
                 Xuất dữ liệu
               </button>
 
-              {/* Lớp phủ tàng hình giúp giữ hover không bị mất khi di chuyển chuột xuống */}
               <div className="absolute right-0 top-full h-2 w-full bg-transparent group-hover:block hidden" />
 
-              {/* Menu Tooltip */}
               <div className="absolute right-0 mt-1 w-48 bg-white border border-slate-100 rounded-xl shadow-2xl py-2 hidden group-hover:block z-[100] animate-in fade-in zoom-in-95 duration-200">
                 <div className="px-3 py-1.5 border-b border-slate-50 mb-1">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
@@ -251,7 +276,7 @@ export default function AuditLogs() {
                   </td>
                 </tr>
               ) : filteredLogs.length > 0 ? (
-                filteredLogs.map((log: any) => (
+                filteredLogs.map((log: AuditLog) => (
                   <tr
                     key={log.id}
                     className="hover:bg-white/[0.02] transition-colors"

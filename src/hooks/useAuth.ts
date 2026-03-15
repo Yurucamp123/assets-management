@@ -10,7 +10,7 @@ interface LoginCredentials {
   password: string;
 }
 
-interface RegisterData {
+export interface RegisterData {
   email: string;
   password: string;
   [key: string]: string;
@@ -54,9 +54,9 @@ export const useRegister = () => {
       navigate("/login");
       toast.success("Đăng ký thành công! Vui lòng đăng nhập.");
     },
-    onError: (error: AuthError) => {
+    onError: () => {
       toast.error("Đăng ký thất bại. Vui lòng thử lại.");
-    }
+    },
   });
 };
 

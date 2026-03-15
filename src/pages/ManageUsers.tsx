@@ -9,56 +9,85 @@ import {
   UserMinus,
   Filter,
 } from "lucide-react";
-import { useState } from "react";
+import React, { useState } from "react";
 import { toast } from "react-hot-toast";
 import { adminApi } from "../api/adminApi";
+import { AxiosError } from "axios";
+
+// --- ĐỊNH NGHĨA TYPES (INTERFACES) ---
+
+interface User {
+  id: number;
+  username: string;
+  fullName: string;
+  email: string;
+  role: string;
+  enabled: boolean;
+}
+
+interface UserPageResponse {
+  content: User[];
+  totalElements: number;
+  totalPages: number;
+  size: number;
+  number: number;
+}
+
+interface ApiResponse<T> {
+  result: T;
+  message?: string;
+}
+
+interface ApiErrorResponse {
+  message: string;
+}
 
 export default function ManageUsers() {
   const queryClient = useQueryClient();
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState<string>("");
 
   // Bổ sung state cho bộ lọc
-  const [roleFilter, setRoleFilter] = useState("ALL");
-  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [roleFilter, setRoleFilter] = useState<string>("ALL");
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
 
-  // 1. Fetch danh sách (BE trả về Page<UserResponse>)
-  const { data, isLoading } = useQuery({
+  // 1. Fetch danh sách (BE trả về ApiResponse<UserPageResponse>)
+  const { data, isLoading } = useQuery<ApiResponse<UserPageResponse>>({
     queryKey: ["admin-users"],
     queryFn: () => adminApi.getUsers(),
   });
 
-  // 2. Mutation Change Role (PATCH /{id}/role?role=...)
+  // 2. Mutation Change Role
   const roleMutation = useMutation({
     mutationFn: ({ id, role }: { id: number; role: string }) =>
       adminApi.updateUserRole(id, role),
-    onSuccess: (res) => {
+    onSuccess: (res: ApiResponse<any>) => {
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       toast.success(res.message || "Đã cập nhật quyền hạn");
     },
-    onError: (err: any) =>
+    onError: (err: AxiosError<ApiErrorResponse>) =>
       toast.error(err?.response?.data?.message || "Lỗi cập nhật quyền"),
   });
 
-  // 3. Mutation Change Status (PATCH /{id}/status?isEnabled=...)
+  // 3. Mutation Change Status
   const statusMutation = useMutation({
     mutationFn: ({ id, isEnabled }: { id: number; isEnabled: boolean }) =>
       adminApi.updateUserStatus(id, isEnabled),
-    onSuccess: (res) => {
+    onSuccess: (res: ApiResponse<any>) => {
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       toast.success(res.message || "Đã cập nhật trạng thái");
     },
-    onError: (err: any) =>
+    onError: (err: AxiosError<ApiErrorResponse>) =>
       toast.error(err?.response?.data?.message || "Lỗi cập nhật trạng thái"),
   });
 
-  // 4. Mutation Delete (DELETE /{id})
+  // 4. Mutation Delete
   const deleteMutation = useMutation({
     mutationFn: (id: number) => adminApi.deleteUser(id),
-    onSuccess: (res) => {
+    onSuccess: (res: ApiResponse<any>) => {
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       toast.success(res.message || "Đã xóa người dùng");
     },
-    onError: (err: any) =>
+    onError: (err: AxiosError<ApiErrorResponse>) =>
       toast.error(err?.response?.data?.message || "Không thể xóa người dùng"),
   });
 
@@ -78,10 +107,10 @@ export default function ManageUsers() {
       </div>
     );
 
-  const users = data?.result?.content || [];
+  const users: User[] = data?.result?.content || [];
 
-  // Logic lọc dữ liệu kết hợp Search + Role + Status
-  const filteredUsers = users.filter((u: any) => {
+  // Logic lọc dữ liệu kết hợp Search + Role + Status (Đã fix type 'any' thành 'User')
+  const filteredUsers = users.filter((u: User) => {
     const matchesSearch =
       u.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       u.email.toLowerCase().includes(searchTerm.toLowerCase());
@@ -116,7 +145,9 @@ export default function ManageUsers() {
             />
             <select
               value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                setRoleFilter(e.target.value)
+              }
               className="pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-sm bg-white outline-none focus:ring-4 focus:ring-blue-500/10 transition-all appearance-none cursor-pointer"
             >
               <option value="ALL">Tất cả quyền</option>
@@ -128,7 +159,9 @@ export default function ManageUsers() {
           {/* Bộ lọc Status */}
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+              setStatusFilter(e.target.value)
+            }
             className="px-4 py-2 border border-slate-200 rounded-xl text-sm bg-white outline-none focus:ring-4 focus:ring-blue-500/10 transition-all cursor-pointer"
           >
             <option value="ALL">Tất cả trạng thái</option>
@@ -146,7 +179,9 @@ export default function ManageUsers() {
               type="text"
               placeholder="Tìm tên hoặc email..."
               className="pl-10 pr-4 py-2 border border-slate-200 rounded-xl text-sm w-full md:w-64 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all"
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                setSearchTerm(e.target.value)
+              }
             />
           </div>
         </div>
@@ -176,7 +211,7 @@ export default function ManageUsers() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredUsers.length > 0 ? (
-                filteredUsers.map((user: any) => (
+                filteredUsers.map((user: User) => (
                   <tr
                     key={user.id}
                     className="hover:bg-blue-50/30 transition-colors group"
@@ -225,7 +260,7 @@ export default function ManageUsers() {
                         <select
                           value={user.role}
                           disabled={roleMutation.isPending}
-                          onChange={(e) =>
+                          onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
                             roleMutation.mutate({
                               id: user.id,
                               role: e.target.value,
@@ -283,7 +318,7 @@ export default function ManageUsers() {
               ) : (
                 <tr>
                   <td
-                    colSpan={4}
+                    colSpan={5}
                     className="p-10 text-center text-slate-400 italic"
                   >
                     Không tìm thấy người dùng nào phù hợp với bộ lọc.
