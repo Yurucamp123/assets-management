@@ -34,7 +34,7 @@ export default function SocialRedirect() {
               navigate(target, { replace: true });
             }, 100);
           }
-        }, 3000);
+        }, 2000);
       } catch (error) {
         console.error("Đồng bộ tài khoản thất bại", error);
         navigate("/login");
